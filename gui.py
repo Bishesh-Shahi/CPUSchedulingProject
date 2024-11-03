@@ -254,18 +254,6 @@ class SchedulerGUI:
                        color=colors[process.name], 
                        edgecolor='black',
                        alpha=0.7)
-                
-                # Add time markers
-                if i == 0 or execution_sequence[i-1]['end_time'] != start_time:
-                    ax.axvline(x=start_time, color='gray', linestyle='--', alpha=0.5)
-                ax.text(start_time, -0.5, f'{start_time}', 
-                       rotation=45, ha='right', va='top')
-            
-            # Add final time marker
-            last_end_time = execution_sequence[-1]['end_time']
-            ax.axvline(x=last_end_time, color='gray', linestyle='--', alpha=0.5)
-            ax.text(last_end_time, -0.5, f'{last_end_time}', 
-                   rotation=45, ha='right', va='top')
             
             # Customize the chart
             ax.set_xlabel('Time')
