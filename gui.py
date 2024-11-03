@@ -191,77 +191,181 @@ class SchedulerGUI:
             self.quantum_frame.pack_forget()
             
     def schedule_processes(self):
-        """Execute the selected scheduling algorithm."""
-        if not self.processes:
-            messagebox.showwarning("Warning", "Please add some processes first")
-            return
-            
         algorithm = self.selected_algorithm.get()
+        self.output_text.configure(state="normal")
+        self.output_text.delete("1.0", tk.END)  # Clear the text widget
         
-        try:
-            if algorithm == "FCFS":
-                scheduler = FCFS()
-            elif algorithm == "RR":
-                quantum = self.quantum_time.get()
-                if quantum <= 0:
-                    raise ValueError("Quantum time must be positive")
-                scheduler = RR(quantum)
-            elif algorithm == "Priority":
-                scheduler = Priority()
-                
-            # Clear previous output
-            self.output_text.delete(1.0, tk.END)
-            
-            # Run scheduling algorithm
-            output = scheduler.schedule(self.processes.copy())
-            self.output_text.insert(tk.END, output)
-            
-            # Update Gantt chart
-            self.plot_gantt_chart()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Scheduling error: {str(e)}")
-            
-    def plot_gantt_chart(self):
-        """Generate and display the Gantt chart."""
-        # Clear previous chart
+        # Create the appropriate scheduler instance
+        if algorithm == "FCFS":
+            scheduler = FCFS()
+        elif algorithm == "RR":
+            quantum = self.quantum_time.get()  # Get the quantum time from the entry
+            scheduler = RR(quantum)  # Pass the quantum to the RR scheduler
+        elif algorithm == "Priority":
+            scheduler = Priority()
+        else:
+            self.output_text.insert(tk.END, "Selected algorithm is not implemented.")
+            self.output_text.configure(state="disabled")
+            return
+        
+        # Get the scheduling output
+        scheduling_output = scheduler.schedule(self.processes)
+        self.output_text.insert(tk.END, scheduling_output)
+        self.output_text.configure(state="disabled")
+
+        # Plot the Gantt chart after scheduling, passing the scheduler instance
+        self.plot_gantt_chart(scheduler)
+
+    def plot_gantt_chart(self, scheduler):
         for widget in self.gantt_frame.winfo_children():
             widget.destroy()
-            
-        if not self.processes:
-            return
-            
-        fig, ax = plt.subplots(figsize=(8, 4))
+
+        fig, ax = plt.subplots(figsize=(12, 6))
         
-        # Generate colors for processes
-        colors = plt.cm.Set3(np.linspace(0, 1, len(self.processes)))
-        
-        # Plot each process
-        for i, process in enumerate(self.processes):
-            start = process.arrival_time
-            duration = process.burst_time
-            ax.barh(i, duration, left=start, color=colors[i], 
-                   label=f'Process {process.name}')
+        if isinstance(scheduler, RR):
+            # Get execution sequence for Round Robin
+            execution_sequence = self.get_rr_execution_sequence(scheduler)
             
-            # Add process details
-            ax.text(start + duration/2, i, f'P{process.name}',
-                   ha='center', va='center')
+            # Create unique process list while preserving order
+            unique_processes = []
+            process_indices = {}  # Maps process name to y-axis position
             
-        # Customize the chart
-        ax.set_xlabel('Time')
-        ax.set_ylabel('Processes')
-        ax.set_title('Process Scheduling Gantt Chart')
-        ax.set_yticks(range(len(self.processes)))
-        ax.set_yticklabels([f'P{p.name}' for p in self.processes])
-        ax.grid(True, alpha=0.3)
-        
+            for entry in execution_sequence:
+                process_name = entry['process'].name
+                if process_name not in process_indices:
+                    process_indices[process_name] = len(unique_processes)
+                    unique_processes.append(entry['process'])
+
+            # Create color map
+            cmap = plt.get_cmap('tab10')
+            colors = {process.name: cmap(i % 10) for i, process in enumerate(unique_processes)}
+            
+            # Plot execution blocks
+            for i, entry in enumerate(execution_sequence):
+                process = entry['process']
+                start_time = entry['start_time']
+                end_time = entry['end_time']
+                y_pos = process_indices[process.name]
+                
+                # Plot the execution block
+                ax.barh(y_pos, 
+                       end_time - start_time, 
+                       left=start_time, 
+                       color=colors[process.name], 
+                       edgecolor='black',
+                       alpha=0.7)
+                
+                # Add time markers
+                if i == 0 or execution_sequence[i-1]['end_time'] != start_time:
+                    ax.axvline(x=start_time, color='gray', linestyle='--', alpha=0.5)
+                ax.text(start_time, -0.5, f'{start_time}', 
+                       rotation=45, ha='right', va='top')
+            
+            # Add final time marker
+            last_end_time = execution_sequence[-1]['end_time']
+            ax.axvline(x=last_end_time, color='gray', linestyle='--', alpha=0.5)
+            ax.text(last_end_time, -0.5, f'{last_end_time}', 
+                   rotation=45, ha='right', va='top')
+            
+            # Customize the chart
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Processes')
+            ax.set_title('Round Robin Gantt Chart')
+            ax.set_yticks(range(len(unique_processes)))
+            ax.set_yticklabels([f'Process {p.name}' for p in unique_processes])
+            ax.grid(True, axis='x', alpha=0.3)
+            
+            # Add legend
+            handles = [plt.Rectangle((0,0),1,1, color=colors[p.name]) for p in unique_processes]
+            ax.legend(handles, [f'Process {p.name}' for p in unique_processes], 
+                     loc='upper right', bbox_to_anchor=(1.15, 1))
+            
+        else:
+            # Original implementation for other algorithms
+            processes = self.processes
+            cmap = plt.get_cmap('tab10')
+            colors = cmap(np.linspace(0, 1, len(processes)))
+            
+            for i, process in enumerate(processes):
+                start_time = process.arrival_time
+                end_time = process.arrival_time + process.burst_time
+                ax.barh(i, end_time - start_time, left=start_time, 
+                       color=colors[i], label=f'Process {process.name}')
+            
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Processes')
+            ax.set_title('Gantt Chart')
+            ax.set_yticks(np.arange(len(processes)))
+            ax.set_yticklabels([f'Process {p.name}' for p in processes])
+            ax.legend(loc='upper right')
+            ax.grid(True)
+
         plt.tight_layout()
         
-        # Embed the chart in the GUI
         canvas = FigureCanvasTkAgg(fig, master=self.gantt_frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
+    def get_rr_execution_sequence(self, scheduler):
+        """
+        Simulate Round Robin scheduling to get the execution sequence.
+        Returns a list of dictionaries containing process and its execution time slots.
+        """
+        if not self.processes:
+            return []
+            
+        execution_sequence = []
+        current_time = 0
+        ready_queue = []
+        processes = [Process(p.name, p.arrival_time, p.burst_time, p.priority) 
+                    for p in self.processes]  # Create a deep copy
+        remaining_burst_times = {p.name: p.burst_time for p in processes}
+        
+        while True:
+            # Add newly arrived processes to ready queue
+            for process in processes:
+                if (process.arrival_time <= current_time and 
+                    remaining_burst_times[process.name] > 0 and 
+                    process not in ready_queue):
+                    ready_queue.append(process)
+            
+            if not ready_queue:
+                if all(remaining_burst_times[p.name] == 0 for p in processes):
+                    break
+                current_time += 1
+                continue
+            
+            # Get next process from ready queue
+            current_process = ready_queue.pop(0)
+            
+            # Calculate execution time for this quantum
+            execution_time = min(scheduler.time_quantum, 
+                               remaining_burst_times[current_process.name])
+            
+            # Record execution block
+            execution_sequence.append({
+                'process': current_process,
+                'start_time': current_time,
+                'end_time': current_time + execution_time
+            })
+            
+            # Update time and remaining burst time
+            current_time += execution_time
+            remaining_burst_times[current_process.name] -= execution_time
+            
+            # Re-add process to ready queue if it's not finished
+            if remaining_burst_times[current_process.name] > 0:
+                ready_queue.append(current_process)
+            
+            # Add newly arrived processes that came during this execution
+            for process in processes:
+                if (process.arrival_time <= current_time and 
+                    remaining_burst_times[process.name] > 0 and 
+                    process not in ready_queue and 
+                    process != current_process):
+                    ready_queue.append(process)
+        
+        return execution_sequence
 def main():
     root = tk.Tk()
     app = SchedulerGUI(root)
