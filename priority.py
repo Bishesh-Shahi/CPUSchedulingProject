@@ -70,3 +70,4 @@ class Priority:
         scheduling_output += f"Average Turnaround Time: {avg_turnaround_time:.2f}\n"
         
         return scheduling_output
+
