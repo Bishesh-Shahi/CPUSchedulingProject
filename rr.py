@@ -1,5 +1,3 @@
-
-
 class RR:
     def __init__(self, quantum_time):
         self.current_time = 0
@@ -13,48 +11,45 @@ class RR:
         
         remaining_burst_time = [process.burst_time for process in processes]
         waiting_times = [0] * len(processes)
-        first_response_time = [-1] * len(processes)
+        gantt_chart = []  # To store the execution order for the Gantt chart
+        finished_processes = 0  # Count of finished processes
 
-        # Header with centered columns
         scheduling_output = f"{'Process ID':^12}{'Arrival Time':^15}{'Burst Time':^12}{'Waiting Time':^15}{'Turnaround Time':^17}\n"
         scheduling_output += "-" * 71 + "\n"
-        
-        completed_processes = set()  # Track which processes have been output
-        
-        while True:
-            done = True
+        while finished_processes < len(processes):
+            process_found = False
             for i, process in enumerate(processes):
-                if remaining_burst_time[i] > 0:
-                    done = False
-
-                    if first_response_time[i] == -1:
-                        first_response_time[i] = self.current_time
-
+                # Check if the process has arrived and still has burst time left
+                if remaining_burst_time[i] > 0 and process.arrival_time <= self.current_time:
+                    process_found = True  # At least one process is ready to execute
                     if remaining_burst_time[i] > self.time_quantum:
+                        gantt_chart.append(process.name)  # Record execution for Gantt chart
                         self.current_time += self.time_quantum
                         remaining_burst_time[i] -= self.time_quantum
                     else:
+                        gantt_chart.append(process.name)  # Record execution for Gantt chart
                         self.current_time += remaining_burst_time[i]
-                        remaining_burst_time[i] = 0
-                        
                         process_turnaround_time = self.current_time - process.arrival_time
                         self.total_turnaround_time += process_turnaround_time
                         
                         waiting_times[i] = process_turnaround_time - process.burst_time
                         self.total_waiting_time += waiting_times[i]
                         
-                        # Only output process information once when it completes
-                        if i not in completed_processes:
-                            scheduling_output += f"{process.name:^12}{process.arrival_time:^15}{process.burst_time:^12}{waiting_times[i]:^15}{process_turnaround_time:^17}\n"
-                            completed_processes.add(i)
+                        scheduling_output += f"{process.name}\t\t{process.arrival_time}\t\t{process.burst_time}\t\t{waiting_times[i]}\t\t{process_turnaround_time}\n"
+                        remaining_burst_time[i] = 0  # Process finished
+                        finished_processes += 1  # Increment finished process count
 
-            if done:
-                break
-        
+            # If no process was found, increment current time to the next arriving process
+            if not process_found:
+                next_process_arrival = min(
+                    process.arrival_time for process in processes if process.arrival_time > self.current_time
+                )
+                self.current_time = next_process_arrival  # Jump to next arrival time
+
         avg_waiting_time = self.total_waiting_time / len(processes)
         avg_turnaround_time = self.total_turnaround_time / len(processes)
-        
+
         scheduling_output += f"\nAverage Waiting Time: {avg_waiting_time:.2f}\n"
         scheduling_output += f"Average Turnaround Time: {avg_turnaround_time:.2f}\n"
 
-        return scheduling_output
+        return scheduling_output, gantt_chart  # Return gantt_chart as well
